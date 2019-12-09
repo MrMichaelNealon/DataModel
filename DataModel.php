@@ -3,11 +3,13 @@
 
 /**********************************************************
  * 
+ *  basemms/back/App/Models/DataModel.php
+ * 
  *  Class for handling MySQL tables, provides create,
  *  read, use and delete methods:
  * 
  * 
- *      initialiseTable()       - Will creat the table if
+ *      initialiseTable()       - Will create the table if
  *                                it doesn't exist.
  * 
  *      insertTableRow()        - Insert a row into the
@@ -29,12 +31,11 @@
  */
 
 
-//  Change these to point to/login to your MySQL server.
-//
-    define('DB_HOST', 'db-hose');
-    define('DB_NAME', 'db-name');
-    define('DB_USER', 'db-user');
-    define('DB_PSWD', 'db-pswd');
+namespace App\Models;
+
+
+use PDO;
+
 
 
 /**
@@ -52,8 +53,9 @@
  *  required.
  */
     define('DB_SQL_TYPES', Array(
-        'varchar' =>    true,
+        "varchar" =>    true,
         "char" =>       true,
+        "text" =>       true,
         "int" =>        false
     ));
 
@@ -66,7 +68,7 @@ Class DataModel
 
     protected           $dbHandler;
 
-    protected           $errorMssage;
+    protected           $errorMessage;
 
 
 /**
@@ -168,7 +170,7 @@ private function __execSQLQuery($sqlQuery)
             $_stmt = $this->dbHandler->prepare($sqlQuery);
             $_stmt->execute();
         }
-        catch (PDOException $ex)
+        catch (\PDOException $ex)
         {
             return $this->__setError($ex->getMessage());
         }
@@ -229,9 +231,18 @@ public function initialiseTable($tableName, $tableColumns)
         if ($_primaryKey !== false)
             $_sqlQuery .= "," . PHP_EOL . "PRIMARY KEY ($_primaryKey)";
 
-        if ($this->tableExists($tableName) === false)
-            return $this->__execSQLQuery("CREATE TABLE $tableName (" . PHP_EOL . $_sqlQuery . PHP_EOL . ")");
-        
+        if ($this->tableExists($tableName) === false) {
+            try
+            {
+                $this->dbHandler->query("CREATE TABLE $tableName (" . PHP_EOL . $_sqlQuery . PHP_EOL . ")");
+                //echo "Created table $tableName: |$_sqlQuery|<br>\n";
+                //die();
+            }
+            catch (PDOException $ex)
+            {
+                $this->__setError("Error in initialiseTable(): " . $ex->getMessage());
+            }
+        }
         return false;
     }
 
@@ -781,11 +792,15 @@ public function updateTableRow($updateTableData, $matchTableData)
 
         try
         {
+            // echo "update query: $_sqlQuery<br";
+            // print_r($_exprParameters);
+            // die();
             $_stmt = $this->dbHandler->prepare($_sqlQuery);
             $_stmt->execute($_exprParameters);
         }
         catch (PDOException $ex)
         {
+            die($ex->getMessage());
             return $this->__setError("Error in updateTableRow: " . $ex->getMessage());
         }
 
@@ -853,6 +868,50 @@ public function getSQLDataSet($tableData, &$exprParameters)
         }
 
         return $_sqlSet;
+    }
+
+
+/**
+ * 
+ * Method used to search tables.
+ * 
+ *  I hacked this together for the search function
+ *  on bitraq.
+ * 
+ *  Not much to say - returns any rows that match
+ *  the given criteria.
+ * 
+ * @param columnName
+ *  Column to search for matches.
+ * 
+ * @param searchQuery
+ *  Query string to search for.
+ * 
+ * @return
+ *  Array of rows (if any) where a match was found.
+ * 
+ */
+public function getRowsLike($columnName, $searchQuery)
+    {
+        $_sqlString = "SELECT * FROM {$this->tableName} WHERE $columnName LIKE ?";
+        
+        try
+        {
+            $_stmt = $this->dbHandler->prepare($_sqlString);
+            $_stmt->execute(
+                Array(
+                    "%" . $searchQuery . "%"
+                )
+            );
+
+            return $_stmt->fetchAll();
+        }
+        catch (PDOException $ex)
+        {
+            $this->__setError("Error in getRowsLike(): " . $ex->getMessage());
+        }
+
+        return false;
     }
 
 
@@ -954,6 +1013,31 @@ public function deleteTableRow($matchTableData)
         }
 
         return true;
+    }
+
+
+/** 
+ *
+ *  Will return all of the rows in the table.
+ * 
+ * @return
+ * array containing the selected rows.
+ *
+ */
+public function getAll()
+    {
+        try
+        {
+            $_stmt = $this->dbHandler->prepare("SELECT * FROM {$this->tableName}");
+            $_stmt->execute();
+        }
+        catch (PDOException $ex)
+        {
+            $this->__setError("Error in getAll(): " . $ex->getMessage());
+            return false;
+        }
+
+        return $_stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
 }
